@@ -270,6 +270,7 @@ function askPassword(wrong) {
   $('pwDialog').showModal();
 }
 $('pwForm').addEventListener('submit', (e) => { if (e.submitter?.value === 'ok') show($('pwInput').value); });
+$('pwCancel').onclick = () => $('pwDialog').close();
 
 fileInput.onchange = () => open(fileInput.files[0]);
 // Labels pointing at the file input aren't keyboard-activatable by default.
