@@ -1,0 +1,30 @@
+{
+  "name": "gradient-pdf",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SankeerthNara/gradient-pdf.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/SankeerthNara/gradient-pdf/issues"
+  },
+  "homepage": "https://github.com/SankeerthNara/gradient-pdf#readme",
+  "dependencies": {
+    "@cantoo/pdf-lib": "^2.11.1",
+    "@fontsource-variable/archivo": "^5.3.0",
+    "pdfjs-dist": "^6.4.299"
+  },
+  "devDependencies": {
+    "vite": "^8.3.5"
+  },
+  "private": true
+}
