@@ -3,3 +3,6 @@ dist
 .vercel
 test/out
 *.apk
+android/keystore.properties
+*.jks
+*.aab
