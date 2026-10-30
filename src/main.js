@@ -245,6 +245,7 @@ async function show(password) {
     const { info } = await pdf.getMetadata();
     pdfDoc?.loadingTask.destroy(); // pdf.js v6: documents are closed via their loading task
     pdfDoc = pdf;
+    exportCache = null;
     locked = !!info.EncryptFilterName;
     docPassword = password;
     docName.textContent = `${fileName}.pdf`;
@@ -321,18 +322,38 @@ reset.onclick = () => {
   showScreen(home);
 };
 
-/* ---------- export ---------- */
-download.onclick = async () => {
+/* ---------- export (shared by Download and the viewer) ---------- */
+let exportCache = null; // { id, bytes }: the recoloured file for the current PDF + style
+function canExport() {
   // Opened without a password but still encrypted: the author restricted editing, so respect that.
-  if (locked && !docPassword) return toast('This PDF’s owner has restricted editing, so it can’t be recoloured 🔒');
+  if (locked && !docPassword) { toast('This PDF’s owner has restricted editing, so it can’t be recoloured 🔒'); return false; }
+  return true;
+}
+async function buildExport(onProgress) {
+  if (exportCache?.id === current.id) return exportCache.bytes;
+  const { recolor } = await import('./recolor.js');
+  const out = await recolor(bytes, current, onProgress, docPassword);
+  exportCache = { id: current.id, bytes: out };
+  return out;
+}
+async function exportFailed(e) {
+  console.error(e);
+  const { EncryptedPDFError } = await import('./recolor.js');
+  toast(e instanceof EncryptedPDFError ? 'This PDF is protected and couldn’t be unlocked 🔒' : 'Export failed, try again');
+}
+const pdfUrl = (out) => URL.createObjectURL(new Blob([out], { type: 'application/pdf' }));
+function saveFile(out) {
+  const url = pdfUrl(out);
+  Object.assign(document.createElement('a'), { href: url, download: `${fileName}-${current.id}.pdf` }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+download.onclick = async () => {
+  if (!canExport()) return;
   download.disabled = true;
   const label = download.firstChild;
-  const { recolor, EncryptedPDFError } = await import('./recolor.js');
   try {
-    const out = await recolor(bytes, current, (i, n) => { label.textContent = `Working… ${i}/${n} `; }, docPassword);
-    const url = URL.createObjectURL(new Blob([out], { type: 'application/pdf' }));
-    Object.assign(document.createElement('a'), { href: url, download: `${fileName}-${current.id}.pdf` }).click();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    saveFile(await buildExport((i, n) => { label.textContent = `Working… ${i}/${n} `; }));
     label.textContent = 'Downloaded ';
     download.lastElementChild.textContent = '✓';
     download.classList.add('done');
@@ -342,10 +363,62 @@ download.onclick = async () => {
       download.lastElementChild.textContent = '↓';
     }, 1800);
   } catch (e) {
-    console.error(e);
     label.textContent = 'Download PDF ';
-    toast(e instanceof EncryptedPDFError ? 'This PDF is protected and couldn’t be unlocked 🔒' : 'Export failed, try again');
+    exportFailed(e);
   } finally {
     download.disabled = false;
   }
+};
+
+/* ---------- full PDF viewer: shows the real recoloured file ---------- */
+const viewerEl = $('viewer');
+let viewerMod = null; // the viewer's code is only downloaded the first time it's opened
+if (location.hash === '#view') history.replaceState(null, '', location.pathname); // nothing to show after a reload
+
+function closeViewer() {
+  viewerEl.hidden = true;
+  root.classList.remove('viewing');
+  viewerMod?.then((m) => m.unload());
+}
+$('viewFull').onclick = async () => {
+  if (!canExport()) return;
+  viewerEl.hidden = false;
+  root.classList.add('viewing');
+  $('vTitle').textContent = `${fileName}-${current.id}.pdf`;
+  $('vProgress').hidden = false;
+  // Its own history entry, so the phone/browser Back button returns to the editor.
+  history.pushState({ viewer: true }, '', '#view');
+  try {
+    const [mod, out] = await Promise.all([
+      (viewerMod ??= import('./viewer.js')),
+      buildExport((i, n) => { $('vProgressText').textContent = `Applying ${current.name} · page ${i} of ${n}`; }),
+    ]);
+    if (!viewerEl.hidden) await mod.load(out, docPassword);
+  } catch (e) {
+    $('vModify').click();
+    exportFailed(e);
+  } finally {
+    $('vProgress').hidden = true;
+    $('vProgressText').textContent = 'Preparing your PDF…';
+  }
+};
+$('vModify').onclick = () => { if (history.state?.viewer) history.back(); else closeViewer(); };
+addEventListener('popstate', () => { if (!viewerEl.hidden && location.hash !== '#view') closeViewer(); });
+
+$('vDownload').onclick = async () => {
+  try { saveFile(await buildExport()); } catch (e) { exportFailed(e); }
+};
+$('vPrint').onclick = async () => {
+  let out;
+  try { out = await buildExport(); } catch (e) { return exportFailed(e); }
+  const url = pdfUrl(out);
+  // A locked file needs its password typed in the browser's own viewer, so open it there.
+  if (docPassword) return window.open(url);
+  const frame = Object.assign(document.createElement('iframe'), { src: url });
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0';
+  frame.onload = () => {
+    try { frame.contentWindow.print(); } catch { window.open(url); }
+    setTimeout(() => { frame.remove(); URL.revokeObjectURL(url); }, 60000);
+  };
+  document.body.append(frame);
 };

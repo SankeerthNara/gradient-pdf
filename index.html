@@ -102,12 +102,45 @@
         <p id="meta" class="muted a a-up" style="--d:.15s"></p>
 
         <button id="download" class="pill a a-pill" style="--d:.2s">Download PDF <span class="pill-dot">↓</span></button>
+        <button id="viewFull" class="ghost-pill a a-up" style="--d:.22s">View full PDF</button>
         <button id="reset" class="ghost-pill a a-up" style="--d:.25s">Choose another PDF</button>
       </div>
     </section>
 
     <div id="loader" class="loader" hidden><span></span></div>
   </main>
+
+  <!-- ---------- full PDF viewer (Chrome-style) ---------- -->
+  <section id="viewer" class="viewer" hidden aria-label="PDF viewer">
+    <header class="vbar">
+      <button id="vThumbs" class="vbtn" aria-label="Page thumbnails" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
+      <span id="vTitle" class="vtitle">file.pdf</span>
+      <div class="vgroup vpage"><input id="vPage" inputmode="numeric" aria-label="Page number" value="1" /><span>/</span><span id="vPages">1</span></div>
+      <div class="vgroup">
+        <button id="vOut" class="vbtn hide-narrow" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg></button>
+        <button id="vZoomLabel" class="vzoom" aria-label="Toggle fit to page / width">100%</button>
+        <button id="vIn" class="vbtn hide-narrow" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
+      </div>
+      <button id="vFit" class="vbtn hide-narrow" aria-label="Fit to page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg></button>
+      <button id="vRotate" class="vbtn hide-narrow" aria-label="Rotate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" /></svg></button>
+      <span class="vspacer"></span>
+      <button id="vFind" class="vbtn" aria-label="Find in document"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14ZM20 20l-4-4" /></svg></button>
+      <button id="vDownload" class="vbtn" aria-label="Download"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg></button>
+      <button id="vPrint" class="vbtn hide-touch" aria-label="Print"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V4h10v4M7 17H5v-7h14v7h-2M7 14h10v6H7Z" /></svg></button>
+      <button id="vModify" class="pill small vmodify">Modify</button>
+    </header>
+    <div id="vFindBar" class="vfind" hidden>
+      <input id="vFindInput" type="search" placeholder="Find in document" aria-label="Find in document" />
+      <span id="vFindCount" aria-live="polite"></span>
+      <button id="vFindPrev" class="vbtn" aria-label="Previous match"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg></button>
+      <button id="vFindNext" class="vbtn" aria-label="Next match"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
+    </div>
+    <div class="vbody">
+      <aside id="vSidebar" class="vsidebar" aria-label="Pages"></aside>
+      <div id="vContainer" class="vcontainer"><div id="vPdf" class="pdfViewer"></div></div>
+      <div id="vProgress" class="vprogress" hidden><span class="vspin"></span><p id="vProgressText">Preparing your PDF…</p></div>
+    </div>
+  </section>
 
   <dialog id="pwDialog">
     <form method="dialog" id="pwForm">
