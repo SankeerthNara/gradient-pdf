@@ -1,6 +1,7 @@
 import '@fontsource-variable/archivo/wdth.css';
 import './style.css';
 import { initTheme } from './theme.js';
+import { initAnalytics } from './analytics.js';
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { STYLES, cssGradient, customStyle, toneTrack } from './styles.js';
@@ -50,6 +51,7 @@ function showScreen(next) {
 }
 
 initTheme(themeBtn);
+initAnalytics();
 
 /* ---------- saved custom styles (localStorage) ---------- */
 const SAVE_KEY = 'gradientPdf.customStyles.v2';

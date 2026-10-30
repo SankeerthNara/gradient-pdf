@@ -43,9 +43,6 @@ def page(file, path, title, desc, h1, body, crumb=True, index=True):
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href="{FAV}" />
   <script>try{{document.documentElement.dataset.theme=localStorage.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}}catch(e){{}}</script>
-  <!-- Vercel Web Analytics: cookieless, no personal identifiers -->
-  <script>window.va = window.va || function () {{ (window.vaq = window.vaq || []).push(arguments); }};</script>
-  <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
   <header class="nav">
@@ -72,6 +69,7 @@ def page(file, path, title, desc, h1, body, crumb=True, index=True):
     <a href="/privacy">Privacy</a>
     <a href="/terms">Terms</a>
     <a href="{CONTACT}" rel="noopener">Contact</a>
+    <button type="button" class="link-btn" data-cookie-settings hidden>Cookie settings</button>
   </footer>
 
   <script type="module" src="/src/page.js"></script>
@@ -101,11 +99,13 @@ page('privacy.html', '/privacy', 'Privacy policy · Gradient PDF',
     <li><strong>Saved custom styles</strong> (two slider positions each), so they appear next time.</li>
     <li><strong>Opening animation seen</strong>, for the current tab only, so it plays once per visit.</li>
   </ul>
-  <p>These live in your browser's own storage. We can't see them, and you can remove them at any time by clearing this site's data in your browser settings. We don't use cookies.</p>
+  <p>These live in your browser's own storage. We can't see them, and you can remove them at any time by clearing this site's data in your browser settings. Your cookie choice is stored the same way.</p>
   <h2>Hosting</h2>
   <p>The site is hosted by Vercel. Like any web host, Vercel processes standard request information such as IP address, browser type and the page requested, to deliver and protect the site. See <a href="https://vercel.com/legal/privacy-policy" rel="noopener">Vercel's privacy policy</a>.</p>
-  <h2>Analytics</h2>
-  <p>We use <a href="https://vercel.com/docs/analytics/privacy-policy" rel="noopener">Vercel Web Analytics</a> to count page visits, so we know which pages are useful. It sets no cookies and stores no personal identifiers: visitors are counted with a hash of the request that resets every day, so you can't be followed across days or sites. It records the page address, referrer, country, browser and device type. It never sees your PDFs, passwords or styles.</p>
+  <h2>Analytics and cookies</h2>
+  <p>With your permission, we use <a href="https://policies.google.com/privacy" rel="noopener">Google Analytics</a> to understand how the site is used, such as which pages are visited and roughly where visitors come from. Google Analytics only loads after you choose <strong>Accept</strong> in the cookie banner. If you choose <strong>Decline</strong>, it never loads.</p>
+  <p>When accepted, Google Analytics sets cookies named <code>_ga</code> and <code>_ga_*</code> to tell visits apart. It records things like pages viewed, referring site, approximate location, browser and device. Google processes this data on our behalf and may transfer it outside your country. It never sees your PDFs, passwords or styles.</p>
+  <p>You can change your choice at any time with <strong>Cookie settings</strong> at the bottom of every page. Declining after accepting stops Google Analytics and removes its cookies from this site.</p>
   <h2>Children</h2>
   <p>The site isn't directed at children and doesn't knowingly collect personal information from anyone.</p>
   <h2>Changes and contact</h2>

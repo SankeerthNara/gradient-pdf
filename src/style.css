@@ -385,3 +385,16 @@ dialog menu { display: flex; justify-content: flex-end; gap: .6rem; padding: 0; 
   font-size: .875rem; font-weight: 600;
 }
 .site-footer a { color: var(--muted); text-decoration: none; }
+
+/* ---------- cookie consent (only shown when Google Analytics is configured) ---------- */
+.consent {
+  position: fixed; left: 50%; bottom: max(1rem, env(safe-area-inset-bottom)); z-index: 70; translate: -50% 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .8rem 1.2rem; width: min(94vw, 40rem);
+  padding: 1rem 1.2rem; border: 1px solid var(--line); border-radius: 1.4rem;
+  background: var(--surface); box-shadow: 0 16px 40px -18px #000a; animation: up .5s var(--ease);
+}
+.consent p { flex: 1 1 18rem; margin: 0; font-size: .9rem; line-height: 1.5; }
+.consent a { color: inherit; }
+.consent-actions { display: flex; gap: .5rem; }
+.consent .ghost-pill { padding: .6rem 1.1rem; }
+.site-footer .link-btn { font-size: inherit; text-decoration: none; }

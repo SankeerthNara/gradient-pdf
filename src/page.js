@@ -2,6 +2,8 @@
 import '@fontsource-variable/archivo/wdth.css';
 import './style.css';
 import { initTheme } from './theme.js';
+import { initAnalytics } from './analytics.js';
 
 initTheme(document.getElementById('theme'));
+initAnalytics();
 for (const el of document.querySelectorAll('.nav, .doc-page')) el.classList.add('play');
