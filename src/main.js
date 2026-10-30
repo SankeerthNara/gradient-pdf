@@ -1,9 +1,10 @@
 import '@fontsource-variable/archivo/wdth.css';
 import './style.css';
+import { initTheme } from './theme.js';
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { STYLES, cssGradient, customStyle, toneTrack } from './styles.js';
-import { duotone, rgbOf } from './duotone.js';
+import { duoFilter, rgbOf } from './duotone.js';
 // pdf-lib is only needed at export time, so it's loaded lazily.
 
 // Start the 1.2 MB PDF engine now, so the first file opens without waiting for it.
@@ -48,28 +49,7 @@ function showScreen(next) {
   }
 }
 
-/* ---------- theme (circular reveal from the toggle, like Tabby) ---------- */
-function syncThemeLabel() {
-  themeBtn.setAttribute('aria-label', `Switch to ${root.dataset.theme === 'dark' ? 'light' : 'dark'} theme`);
-}
-syncThemeLabel();
-themeBtn.onclick = () => {
-  const apply = () => {
-    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
-    try { localStorage.theme = root.dataset.theme; } catch {}
-    syncThemeLabel();
-  };
-  if (!document.startViewTransition || reducedMotion()) return apply();
-  const r = themeBtn.getBoundingClientRect();
-  const x = r.left + r.width / 2, y = r.top + r.height / 2;
-  const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-  document.startViewTransition(apply).ready.then(() => {
-    root.animate(
-      { clipPath: [`circle(0 at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-      { duration: 650, easing: 'cubic-bezier(.16, 1, .3, 1)', pseudoElement: '::view-transition-new(root)' },
-    );
-  });
-};
+initTheme(themeBtn);
 
 /* ---------- saved custom styles (localStorage) ---------- */
 const SAVE_KEY = 'gradientPdf.customStyles.v2';
@@ -198,15 +178,9 @@ $('customForm').addEventListener('submit', (e) => {
   centerOn(s, 'smooth');
 });
 
-/* ---------- duotone preview: same maths as the PDF soft mask in recolor.js ---------- */
-const ctx2d = canvas.getContext('2d');
-let basePixels = null, previewRaf;
+/* ---------- custom-style preview: a GPU filter with the same maths as the export ---------- */
 function paintPreview() {
-  cancelAnimationFrame(previewRaf);
-  previewRaf = requestAnimationFrame(() => {
-    if (!basePixels) return;
-    ctx2d.putImageData(current.mode === 'duo' ? duotone(basePixels, current) : basePixels, 0, 0);
-  });
+  canvas.style.filter = current.mode === 'duo' ? duoFilter(current, canvas.width, canvas.height) : '';
 }
 
 removeCustom.onclick = () => {
@@ -275,10 +249,8 @@ async function drawPage(n) {
   canvas.style.width = `${vp.width / dpr}px`;
   canvas.style.height = `${vp.height / dpr}px`;
   renderTask = p.render({ canvas, viewport: vp });
-  basePixels = null;
   try { await renderTask.promise; } catch (e) { if (e.name === 'RenderingCancelledException') return; throw e; }
-  basePixels = ctx2d.getImageData(0, 0, canvas.width, canvas.height);
-  paintPreview();
+  paintPreview(); // the page's aspect ratio may have changed
 }
 
 function turnPage(step) {

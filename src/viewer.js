@@ -1,7 +1,7 @@
 // In-app PDF viewer (Chrome-style layout, Tabby colours). Loaded on demand.
 import * as pdfjs from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import { duotoneCanvas } from './duotone.js';
+import { duoFilter } from './duotone.js';
 
 // pdf_viewer.mjs reads the core library from this global, so set it before importing.
 globalThis.pdfjsLib = pdfjs;
@@ -32,11 +32,11 @@ async function pumpThumbs() {
 }
 
 // Preset styles are CSS blend layers over each page (see .viewer[data-mode] in style.css);
-// custom styles recolour the page canvas once pdf.js has drawn it.
+// custom styles get a GPU filter on each page canvas once pdf.js has drawn it.
 eventBus.on('pagerendered', ({ source, cssTransform, isDetailView }) => {
   const canvas = source.canvas;
   if (!canvas || cssTransform || isDetailView) return;
-  if (style?.mode === 'duo') duotoneCanvas(canvas, style);
+  if (style?.mode === 'duo') canvas.style.filter = duoFilter(style, canvas.width, canvas.height);
   canvas.dataset.ready = '';
   if (!thumbsGo) { thumbsGo = true; pumpThumbs(); }
 });
@@ -110,7 +110,7 @@ async function renderThumb(forDoc, el) {
   canvas.height = vp.height;
   canvas.style.aspectRatio = `${vp.width}/${vp.height}`;
   await p.render({ canvas, viewport: vp }).promise.catch(() => {});
-  if (forDoc === doc && style?.mode === 'duo') duotoneCanvas(canvas, style);
+  if (forDoc === doc && style?.mode === 'duo') canvas.style.filter = duoFilter(style, canvas.width, canvas.height);
 }
 
 /* ---------- find in document ---------- */

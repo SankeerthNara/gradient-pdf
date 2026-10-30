@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://gradient-pdf.vercel.app/sitemap.xml

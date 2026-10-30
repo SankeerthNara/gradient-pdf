@@ -81,6 +81,7 @@ main { position: relative; flex: 1; display: flex; align-items: center; }
   display: inline-flex; align-items: center; gap: 1rem; margin-top: 2.25rem;
   padding: .55rem .55rem .55rem 1.9rem; border: 0; border-radius: 999px;
   background: var(--blue); color: #fff; font-size: 1.125rem; font-weight: 600;
+  text-decoration: none;
   transition: transform .3s var(--ease), filter .15s;
 }
 .pill:hover { filter: brightness(1.08); }
@@ -366,3 +367,21 @@ dialog menu { display: flex; justify-content: flex-end; gap: .6rem; padding: 0; 
 /* custom styles: keep a freshly drawn page hidden until it has been recoloured (no flash of the original) */
 .viewer[data-mode="duo"] .canvasWrapper canvas:not([data-ready]) { visibility: hidden; }
 .vthumb .tw { overflow: hidden; border-radius: .2rem; }
+
+/* ---------- content pages (privacy, terms, 404) + site footer ---------- */
+.doc-page { max-width: 46rem; padding-top: 1.5rem; }
+.doc-page h1 { font-size: clamp(2rem, 6vw, 3.4rem); margin: .6rem 0 1.4rem; }
+.crumbs { display: flex; gap: .5rem; font-size: .85rem; color: var(--muted); }
+.crumbs a { color: inherit; }
+.prose { line-height: 1.7; }
+.prose h2 { margin: 2rem 0 .4rem; font-size: 1.15rem; }
+.prose p, .prose li { color: color-mix(in srgb, var(--fg) 82%, transparent); }
+.prose a, .site-footer a:hover { color: var(--blue); }
+[data-theme="dark"] .prose a { color: var(--mint); }
+.updated { color: var(--muted); font-size: .9rem; }
+.site-footer {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: .4rem 1.4rem;
+  padding: 1.4rem 1.25rem max(1.4rem, env(safe-area-inset-bottom)); border-top: 1px solid var(--line);
+  font-size: .875rem; font-weight: 600;
+}
+.site-footer a { color: var(--muted); text-decoration: none; }
