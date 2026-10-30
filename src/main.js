@@ -1,7 +1,8 @@
 import '@fontsource-variable/archivo/wdth.css';
 import './style.css';
-import { initTheme } from './theme.js';
+import { initTheme, fixAppLinks } from './theme.js';
 import { initAnalytics } from './analytics.js';
+import { Capacitor } from '@capacitor/core';
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { STYLES, cssGradient, customStyle, toneTrack } from './styles.js';
@@ -52,6 +53,7 @@ function showScreen(next) {
 
 initTheme(themeBtn);
 initAnalytics();
+fixAppLinks();
 
 /* ---------- saved custom styles (localStorage) ---------- */
 const SAVE_KEY = 'gradientPdf.customStyles.v2';
@@ -348,7 +350,21 @@ function exportFailed(e) {
   toast(e?.encrypted ? 'This PDF is protected and couldn’t be unlocked 🔒' : 'Export failed, try again');
 }
 const pdfUrl = (out) => URL.createObjectURL(new Blob([out], { type: 'application/pdf' }));
-function saveFile(out) {
+// In the Android app, WebView can't save <a download> links: write the file to the app's
+// cache and open the share sheet (Save to Files / Drive / send) instead.
+async function saveNative(out, name) {
+  const [{ Filesystem, Directory }, { Share }] = await Promise.all([import('@capacitor/filesystem'), import('@capacitor/share')]);
+  let bin = '';
+  for (let i = 0; i < out.length; i += 0x8000) bin += String.fromCharCode(...out.subarray(i, i + 0x8000));
+  const { uri } = await Filesystem.writeFile({ path: name, data: btoa(bin), directory: Directory.Cache });
+  try {
+    await Share.share({ title: name, files: [uri] });
+  } catch (e) {
+    if (!/cancel/i.test(e?.message)) throw e; // closing the share sheet isn't an error
+  }
+}
+async function saveFile(out) {
+  if (Capacitor.isNativePlatform()) return saveNative(out, `${fileName}-${current.id}.pdf`);
   const url = pdfUrl(out);
   Object.assign(document.createElement('a'), { href: url, download: `${fileName}-${current.id}.pdf` }).click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
@@ -359,7 +375,7 @@ download.onclick = async () => {
   download.disabled = true;
   const label = download.firstChild;
   try {
-    saveFile(await buildExport((i, n) => { label.textContent = `Working… ${i}/${n} `; }));
+    await saveFile(await buildExport((i, n) => { label.textContent = `Working… ${i}/${n} `; }));
     label.textContent = 'Downloaded ';
     download.lastElementChild.textContent = '✓';
     download.classList.add('done');
@@ -411,7 +427,7 @@ $('vDownload').onclick = async () => {
   const btn = $('vDownload');
   btn.disabled = true;
   if (!exportCache || exportCache.id !== current.id) toast('Preparing your download…');
-  try { saveFile(await buildExport()); } catch (e) { exportFailed(e); } finally { btn.disabled = false; }
+  try { await saveFile(await buildExport()); } catch (e) { exportFailed(e); } finally { btn.disabled = false; }
 };
 $('vPrint').onclick = async () => {
   let out;

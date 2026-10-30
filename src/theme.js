@@ -25,3 +25,9 @@ export function initTheme(themeBtn) {
     });
   };
 }
+
+// The Android app's local server has no clean URLs, so /privacy must be /privacy.html there.
+export function fixAppLinks() {
+  if (!window.Capacitor?.isNativePlatform?.()) return;
+  for (const a of document.querySelectorAll('a[href="/privacy"], a[href="/terms"]')) a.href = `${a.getAttribute('href')}.html`;
+}
