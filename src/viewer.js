@@ -1,6 +1,7 @@
 // In-app PDF viewer (Chrome-style layout, Tabby colours). Loaded on demand.
 import * as pdfjs from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
+import { duotoneCanvas } from './duotone.js';
 
 // pdf_viewer.mjs reads the core library from this global, so set it before importing.
 globalThis.pdfjsLib = pdfjs;
@@ -13,10 +14,32 @@ const narrow = () => matchMedia('(max-width: 799px)').matches;
 const eventBus = new EventBus();
 const linkService = new PDFLinkService({ eventBus });
 const findController = new PDFFindController({ eventBus, linkService });
-const viewer = new PDFViewer({ container, viewer: $('vPdf'), eventBus, linkService, findController, removePageBorders: true });
+// No high-zoom "detail" canvases: custom styles recolour each page canvas, and those would slip past.
+const viewer = new PDFViewer({ container, viewer: $('vPdf'), eventBus, linkService, findController, removePageBorders: true, enableDetailCanvas: false });
 linkService.setViewer(viewer);
 
-let doc = null, thumbObserver = null;
+let doc = null, style = null, thumbObserver = null;
+// Thumbnails share pdf.js's worker with the main pages, so they wait until the first page is up
+// and then render one at a time, never holding up the page you're looking at.
+let thumbQueue = [], thumbBusy = false, thumbsGo = false;
+function queueThumb(el) { thumbQueue.push(el); pumpThumbs(); }
+async function pumpThumbs() {
+  if (thumbBusy || !thumbsGo || !thumbQueue.length) return;
+  thumbBusy = true;
+  await renderThumb(doc, thumbQueue.shift());
+  thumbBusy = false;
+  pumpThumbs();
+}
+
+// Preset styles are CSS blend layers over each page (see .viewer[data-mode] in style.css);
+// custom styles recolour the page canvas once pdf.js has drawn it.
+eventBus.on('pagerendered', ({ source, cssTransform, isDetailView }) => {
+  const canvas = source.canvas;
+  if (!canvas || cssTransform || isDetailView) return;
+  if (style?.mode === 'duo') duotoneCanvas(canvas, style);
+  canvas.dataset.ready = '';
+  if (!thumbsGo) { thumbsGo = true; pumpThumbs(); }
+});
 
 /* ---------- page number, zoom label, active thumbnail ---------- */
 eventBus.on('pagesinit', () => { viewer.currentScaleValue = narrow() ? 'page-width' : 'page-fit'; });
@@ -63,7 +86,7 @@ async function buildThumbs() {
     b.className = 'vthumb';
     b.dataset.page = i + 1;
     b.setAttribute('aria-label', `Page ${i + 1}`);
-    b.innerHTML = `<canvas style="aspect-ratio:${width}/${height}"></canvas><span>${i + 1}</span>`;
+    b.innerHTML = `<span class="tw"><canvas style="aspect-ratio:${width}/${height}"></canvas></span><span>${i + 1}</span>`;
     b.onclick = () => { viewer.currentPageNumber = i + 1; if (narrow()) setSidebar(false); };
     return b;
   }));
@@ -72,14 +95,14 @@ async function buildThumbs() {
     for (const e of entries) {
       if (!e.isIntersecting || e.target.dataset.done) continue;
       e.target.dataset.done = 1;
-      renderThumb(forDoc, e.target);
+      queueThumb(e.target);
     }
   }, { root: sidebar, rootMargin: '300px' });
   for (const t of sidebar.children) thumbObserver.observe(t);
   sidebar.children[0]?.setAttribute('aria-current', '');
 }
 async function renderThumb(forDoc, el) {
-  if (forDoc !== doc) return;
+  if (!el || forDoc !== doc) return;
   const p = await forDoc.getPage(+el.dataset.page);
   const canvas = el.querySelector('canvas');
   const vp = p.getViewport({ scale: (110 * Math.min(devicePixelRatio || 1, 2)) / p.getViewport({ scale: 1 }).width });
@@ -87,6 +110,7 @@ async function renderThumb(forDoc, el) {
   canvas.height = vp.height;
   canvas.style.aspectRatio = `${vp.width}/${vp.height}`;
   await p.render({ canvas, viewport: vp }).promise.catch(() => {});
+  if (forDoc === doc && style?.mode === 'duo') duotoneCanvas(canvas, style);
 }
 
 /* ---------- find in document ---------- */
@@ -145,9 +169,14 @@ container.addEventListener('touchend', () => {
 });
 
 /* ---------- open / close ---------- */
-export async function load(bytes, password) {
+// Shows the document the editor already has open (no re-download, no re-parse), styled live,
+// so the viewer opens instantly whatever the page count.
+export async function load(pdf, pageStyle) {
   unload();
-  doc = await pdfjs.getDocument({ data: bytes.slice(), password }).promise;
+  thumbQueue = [];
+  thumbsGo = false;
+  doc = pdf;
+  style = pageStyle;
   $('vPages').textContent = doc.numPages;
   pageInput.value = 1;
   viewer.setDocument(doc);
@@ -158,12 +187,13 @@ export async function load(bytes, password) {
   await buildThumbs();
 }
 
+// The document belongs to the editor, so it's only detached here, not destroyed.
 export function unload() {
   if (!doc) return;
   thumbObserver?.disconnect();
+  thumbQueue = [];
   sidebar.replaceChildren();
   viewer.setDocument(null);
   linkService.setDocument(null);
-  doc.loadingTask.destroy();
-  doc = null;
+  doc = style = null;
 }

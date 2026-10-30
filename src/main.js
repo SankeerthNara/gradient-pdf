@@ -2,7 +2,8 @@ import '@fontsource-variable/archivo/wdth.css';
 import './style.css';
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { STYLES, ANGLE, cssGradient, customStyle, toneTrack } from './styles.js';
+import { STYLES, cssGradient, customStyle, toneTrack } from './styles.js';
+import { duotone, rgbOf } from './duotone.js';
 // pdf-lib is only needed at export time, so it's loaded lazily.
 
 // Start the 1.2 MB PDF engine now, so the first file opens without waiting for it.
@@ -85,6 +86,7 @@ function storeSaved(list) {
 }
 let saved = loadSaved();
 let allStyles = [];
+let lastCentered = null; // swatch under the notch the last time we looked
 
 /* ---------- style strip ---------- */
 function paintSwatch(el, s) {
@@ -101,9 +103,10 @@ function buildStrip() {
     b.dataset.i = i;
     b.innerHTML = '<span>Aa</span>';
     paintSwatch(b, s);
-    b.onclick = () => b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    b.onclick = () => { select(s); b.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); };
     return b;
   }));
+  lastCentered = null;
 }
 buildStrip();
 const centerOn = (s, behavior = 'auto') =>
@@ -121,7 +124,12 @@ function pickCentered() {
     b.style.setProperty('--d', Math.min(d / 160, 1).toFixed(3));
     if (d < bestD) { bestD = d; best = b; }
   }
-  if (best) select(allStyles[best.dataset.i]);
+  // Only a change of centred swatch picks a style; layout shifts (scrollbar hiding, resizes)
+  // also fire scroll events and must not undo a custom style that isn't in the strip.
+  if (best && best !== lastCentered) {
+    lastCentered = best;
+    select(allStyles[best.dataset.i]);
+  }
 }
 strip.addEventListener('keydown', (e) => {
   const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
@@ -143,6 +151,7 @@ function select(s) {
   paintPreview();
   replay(page, 'settle');
   navigator.vibrate?.(6);
+  prebuildSoon();
 }
 
 /* ---------- custom style pop-up ---------- */
@@ -150,7 +159,6 @@ function select(s) {
 bgTone.style.setProperty('--track', toneTrack('to right'));
 textTone.style.setProperty('--track', toneTrack('to right'));
 
-const rgbOf = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const lum = (h) => { const [r, g, b] = rgbOf(h); return (0.3 * r + 0.59 * g + 0.11 * b) / 255; };
 const draftStyle = () => customStyle(+bgTone.value, +textTone.value);
 
@@ -197,25 +205,7 @@ function paintPreview() {
   cancelAnimationFrame(previewRaf);
   previewRaf = requestAnimationFrame(() => {
     if (!basePixels) return;
-    if (current.mode !== 'duo') return ctx2d.putImageData(basePixels, 0, 0);
-    const { width: w, height: h, data: src } = basePixels;
-    const out = new ImageData(w, h), dst = out.data;
-    const [t0, t1] = current.stops.map(rgbOf), [b0, b1] = current.bg.map(rgbOf);
-    const a = (ANGLE * Math.PI) / 180, dx = Math.sin(a), dy = -Math.cos(a); // CSS gradient axis, y down
-    const len = Math.abs(w * dx) + Math.abs(h * dy);
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4;
-        const g = ((x - w / 2) * dx + (y - h / 2) * dy) / len + 0.5; // position along the gradient
-        const L = (0.3 * src[i] + 0.59 * src[i + 1] + 0.11 * src[i + 2]) / 255; // PDF luminosity
-        for (let c = 0; c < 3; c++) {
-          const tc = t0[c] + (t1[c] - t0[c]) * g, bc = b0[c] + (b1[c] - b0[c]) * g;
-          dst[i + c] = tc + (bc - tc) * L;
-        }
-        dst[i + 3] = 255;
-      }
-    }
-    ctx2d.putImageData(out, 0, 0);
+    ctx2d.putImageData(current.mode === 'duo' ? duotone(basePixels, current) : basePixels, 0, 0);
   });
 }
 
@@ -245,13 +235,15 @@ async function show(password) {
     const { info } = await pdf.getMetadata();
     pdfDoc?.loadingTask.destroy(); // pdf.js v6: documents are closed via their loading task
     pdfDoc = pdf;
-    exportCache = null;
+    cancelExport();
     locked = !!info.EncryptFilterName;
     docPassword = password;
     docName.textContent = `${fileName}.pdf`;
     meta.textContent = `${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''}${!locked ? '' : docPassword ? ' · 🔒 download keeps the same password' : ' · 🔒 editing restricted by its owner'} · style applies to every page`;
     showScreen(editor);
     await drawPage(1);
+    // Fetch the viewer's code while the user is still choosing a style, so "View full PDF" is instant.
+    (window.requestIdleCallback || setTimeout)(() => { viewerMod ??= import('./viewer.js'); });
     centerOn(current);
     pickCentered();
   } catch (e) {
@@ -323,23 +315,62 @@ reset.onclick = () => {
 };
 
 /* ---------- export (shared by Download and the viewer) ---------- */
-let exportCache = null; // { id, bytes }: the recoloured file for the current PDF + style
-function canExport() {
+// The recoloured file is built in a background worker, and started as soon as a style is
+// picked, so by the time Download is tapped it's usually ready.
+let exportCache = null; // { id, bytes } for the current file + style
+let exportJob = null;   // { id, promise, reject, listeners } while the worker is building
+let exportWorker = null;
+let prebuildTimer;
+
+function canExport(quiet) {
   // Opened without a password but still encrypted: the author restricted editing, so respect that.
-  if (locked && !docPassword) { toast('This PDF’s owner has restricted editing, so it can’t be recoloured 🔒'); return false; }
+  if (locked && !docPassword) {
+    if (!quiet) toast('This PDF’s owner has restricted editing, so it can’t be recoloured 🔒');
+    return false;
+  }
   return true;
 }
-async function buildExport(onProgress) {
-  if (exportCache?.id === current.id) return exportCache.bytes;
-  const { recolor } = await import('./recolor.js');
-  const out = await recolor(bytes, current, onProgress, docPassword);
-  exportCache = { id: current.id, bytes: out };
-  return out;
+function cancelExport() {
+  clearTimeout(prebuildTimer);
+  exportWorker?.terminate();
+  exportWorker = null;
+  exportJob?.reject(Object.assign(new Error('cancelled'), { cancelled: true }));
+  exportJob = exportCache = null;
 }
-async function exportFailed(e) {
+function buildExport(onProgress) {
+  const style = current;
+  if (exportCache?.id === style.id) return Promise.resolve(exportCache.bytes);
+  if (exportJob?.id !== style.id) {
+    cancelExport(); // a build for another style is no longer wanted
+    const job = { id: style.id, listeners: new Set() };
+    job.promise = new Promise((resolve, reject) => {
+      job.reject = reject;
+      exportWorker = new Worker(new URL('./export.worker.js', import.meta.url), { type: 'module' });
+      exportWorker.onmessage = ({ data }) => {
+        if (data.progress) return job.listeners.forEach((f) => f(...data.progress));
+        if (exportJob === job) exportJob = null;
+        if (data.error) return reject(Object.assign(new Error(data.error), { encrypted: data.encrypted }));
+        exportCache = { id: style.id, bytes: data.out };
+        resolve(data.out);
+      };
+      exportWorker.onerror = (e) => { if (exportJob === job) exportJob = null; reject(e); };
+      exportWorker.postMessage({ bytes, style, password: docPassword });
+    });
+    job.promise.catch(() => {}); // a prebuild nobody waits on may fail quietly
+    exportJob = job;
+  }
+  if (onProgress) exportJob.listeners.add(onProgress);
+  return exportJob.promise;
+}
+function prebuildSoon() {
+  clearTimeout(prebuildTimer);
+  // Wait until the user stops swiping through styles.
+  prebuildTimer = setTimeout(() => { if (bytes && canExport(true)) buildExport(); }, 700);
+}
+function exportFailed(e) {
+  if (e?.cancelled) return;
   console.error(e);
-  const { EncryptedPDFError } = await import('./recolor.js');
-  toast(e instanceof EncryptedPDFError ? 'This PDF is protected and couldn’t be unlocked 🔒' : 'Export failed, try again');
+  toast(e?.encrypted ? 'This PDF is protected and couldn’t be unlocked 🔒' : 'Export failed, try again');
 }
 const pdfUrl = (out) => URL.createObjectURL(new Blob([out], { type: 'application/pdf' }));
 function saveFile(out) {
@@ -370,9 +401,9 @@ download.onclick = async () => {
   }
 };
 
-/* ---------- full PDF viewer: shows the real recoloured file ---------- */
+/* ---------- full PDF viewer: the open document, styled live ---------- */
 const viewerEl = $('viewer');
-let viewerMod = null; // the viewer's code is only downloaded the first time it's opened
+let viewerMod = null; // viewer code: fetched in idle time once a PDF is open (see show())
 if (location.hash === '#view') history.replaceState(null, '', location.pathname); // nothing to show after a reload
 
 function closeViewer() {
@@ -384,29 +415,28 @@ $('viewFull').onclick = async () => {
   if (!canExport()) return;
   viewerEl.hidden = false;
   root.classList.add('viewing');
+  viewerEl.dataset.mode = current.mode;
+  paintSwatch(viewerEl, current);
   $('vTitle').textContent = `${fileName}-${current.id}.pdf`;
-  $('vProgress').hidden = false;
   // Its own history entry, so the phone/browser Back button returns to the editor.
   history.pushState({ viewer: true }, '', '#view');
   try {
-    const [mod, out] = await Promise.all([
-      (viewerMod ??= import('./viewer.js')),
-      buildExport((i, n) => { $('vProgressText').textContent = `Applying ${current.name} · page ${i} of ${n}`; }),
-    ]);
-    if (!viewerEl.hidden) await mod.load(out, docPassword);
+    const mod = await (viewerMod ??= import('./viewer.js'));
+    if (!viewerEl.hidden) await mod.load(pdfDoc, current);
   } catch (e) {
     $('vModify').click();
-    exportFailed(e);
-  } finally {
-    $('vProgress').hidden = true;
-    $('vProgressText').textContent = 'Preparing your PDF…';
+    console.error(e);
+    toast('Couldn’t open the viewer');
   }
 };
 $('vModify').onclick = () => { if (history.state?.viewer) history.back(); else closeViewer(); };
 addEventListener('popstate', () => { if (!viewerEl.hidden && location.hash !== '#view') closeViewer(); });
 
 $('vDownload').onclick = async () => {
-  try { saveFile(await buildExport()); } catch (e) { exportFailed(e); }
+  const btn = $('vDownload');
+  btn.disabled = true;
+  if (!exportCache || exportCache.id !== current.id) toast('Preparing your download…');
+  try { saveFile(await buildExport()); } catch (e) { exportFailed(e); } finally { btn.disabled = false; }
 };
 $('vPrint').onclick = async () => {
   let out;

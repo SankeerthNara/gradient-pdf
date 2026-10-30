@@ -336,8 +336,6 @@ dialog menu { display: flex; justify-content: flex-end; gap: .6rem; padding: 0; 
 .viewer.with-sidebar .vcontainer { left: 10.5rem; }
 .vcontainer .pdfViewer { padding: 1rem 0 3rem; transform-origin: top center; }
 .vcontainer .pdfViewer .page { margin: 0 auto 1rem; border: 0; border-radius: .25rem; box-shadow: 0 10px 34px -18px #000, 0 0 0 1px #0000001a; }
-.vprogress { position: absolute; inset: 0; z-index: 4; display: grid; place-content: center; justify-items: center; gap: .8rem; background: var(--vbg); color: var(--muted); font-weight: 600; }
-.vspin { width: 2.6rem; height: 2.6rem; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--blue); animation: spin .8s linear infinite; }
 #viewFull { margin-top: .6rem; }
 
 @media (max-width: 799px) {
@@ -353,3 +351,18 @@ dialog menu { display: flex; justify-content: flex-end; gap: .6rem; padding: 0; 
 }
 @media (pointer: coarse) { .hide-touch { display: none; } }
 .viewing body { overflow: hidden; }
+
+/* Live styles in the viewer: the same blend layers as the editor preview, over every page and thumbnail. */
+.viewer .canvasWrapper, .vthumb .tw { position: relative; isolation: isolate; display: block; }
+.vthumb .tw { width: 100%; line-height: 0; }
+.viewer .canvasWrapper::before, .viewer .canvasWrapper::after,
+.vthumb .tw::before, .vthumb .tw::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0; }
+.viewer .canvasWrapper::before, .vthumb .tw::before { background: #fff; mix-blend-mode: difference; }
+.viewer .canvasWrapper::after, .vthumb .tw::after { background: var(--g); mix-blend-mode: multiply; }
+.viewer[data-mode="invert"] :is(.canvasWrapper, .tw)::before,
+.viewer[data-mode="text"] :is(.canvasWrapper, .tw)::before,
+.viewer[data-mode="text"] :is(.canvasWrapper, .tw)::after,
+.viewer[data-mode="paper"] :is(.canvasWrapper, .tw)::after { opacity: 1; }
+/* custom styles: keep a freshly drawn page hidden until it has been recoloured (no flash of the original) */
+.viewer[data-mode="duo"] .canvasWrapper canvas:not([data-ready]) { visibility: hidden; }
+.vthumb .tw { overflow: hidden; border-radius: .2rem; }
